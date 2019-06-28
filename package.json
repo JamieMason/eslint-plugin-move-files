@@ -1,0 +1,44 @@
+{
+  "name": "eslint-plugin-move-files",
+  "description": "Move files around while keeping imports up to date",
+  "version": "0.0.0",
+  "author": "Jamie Mason (https://github.com/JamieMason)",
+  "bugs": "https://github.com/JamieMason/eslint-plugin-move-files/issues",
+  "devDependencies": {
+    "@types/jest": "24.0.12",
+    "@types/mock-fs": "3.6.30",
+    "@types/node": "12.0.0",
+    "eslint": "5.16.0",
+    "jest": "24.8.0",
+    "mock-fs": "4.10.1",
+    "prettier": "1.17.0",
+    "rimraf": "2.6.3",
+    "ts-jest": "24.0.2",
+    "tslint": "5.16.0",
+    "typescript": "3.4.5"
+  },
+  "files": [
+    "dist"
+  ],
+  "homepage": "https://github.com/JamieMason/eslint-plugin-move-files",
+  "keywords": [
+    "es6",
+    "eslint",
+    "eslint-plugin"
+  ],
+  "license": "MIT",
+  "main": "dist/index.js",
+  "peerDependencies": {
+    "eslint": ">=5.0.0"
+  },
+  "repository": "JamieMason/eslint-plugin-move-files",
+  "scripts": {
+    "build": "tsc --project .",
+    "format": "prettier --write '**/*.md' './src/**/*.ts' './test/**/*.ts'",
+    "lint": "tslint --fix --project ./tsconfig.json",
+    "prebuild": "rimraf ./dist",
+    "prelint": "npm run format",
+    "prepack": "npm run build",
+    "test": "jest --runInBand"
+  }
+}
