@@ -5,7 +5,7 @@
     "module": "commonjs",
     "outDir": "./dist",
     "skipLibCheck": true,
-    "strict": false,
+    "strict": true,
     "target": "es5"
   },
   "include": ["./package.json", "./src/**/*.ts"],

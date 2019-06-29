@@ -3,4 +3,5 @@ export const DEFAULT_OPTIONS = {
   rulesDir: process.cwd()
 };
 
-export const ERROR_NO_FILES = 'No files provided to eslint-plugin-move-files';
+export const ERROR_MOVED_FILE = (oldPath: string, newPath: string) =>
+  `${oldPath} has moved to ${newPath}`;

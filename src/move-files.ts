@@ -1,7 +1,10 @@
-import { ERROR_NO_FILES } from './config';
+import { Rule } from 'eslint';
+import { Node } from 'estree';
+import { moveSync } from 'fs-extra';
+import { ERROR_MOVED_FILE } from './config';
 import { getIn } from './lib/get-in';
 
-export default {
+const rule: Rule.RuleModule = {
   meta: {
     docs: {
       category: 'Stylistic Issues',
@@ -26,20 +29,27 @@ export default {
     ]
   },
   create: (context) => {
-    const files = { ...getIn('options.0.files', context) };
+    const files = getIn('options.0.files', context, {});
     const rootDir = getIn('options.0.rootDir', context, process.cwd());
-    const fileCount = Object.keys(files).length;
+    const oldPath = context.getFilename();
+    const newPath = files[oldPath];
 
-    if (fileCount === 0) {
+    if (newPath) {
       return {
-        'Program:exit'(node) {
+        'Program:exit': (node: Node) =>
           context.report({
-            message: ERROR_NO_FILES,
+            fix(fixer) {
+              moveSync(oldPath, newPath, { overwrite: true });
+              return fixer.insertTextAfter(node, '');
+            },
+            message: ERROR_MOVED_FILE(oldPath, newPath),
             node
-          });
-        }
+          })
       };
     }
+
     return {};
   }
 };
+
+export default rule;
