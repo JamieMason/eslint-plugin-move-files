@@ -1,5 +1,6 @@
-import { existsSync, readFileSync } from 'fs';
+import { readFileSync } from 'fs';
 import * as mock from 'mock-fs';
+import { ERROR_FLAT_DIRECTORY, ERROR_MULTIPLE_TARGETS } from './config';
 import rule from './move-files';
 import { ruleTester } from './test/rule-tester';
 
@@ -7,7 +8,7 @@ const readTextFileSync = (filePath: string) =>
   readFileSync(filePath, { encoding: 'utf8' });
 
 beforeAll(() => {
-  console.log('https://github.com/facebook/jest/issues/5792');
+  console.log('https://github.com/tschaub/mock-fs/issues/234');
 });
 
 describe('when no files are provided', () => {
@@ -220,3 +221,132 @@ describe('when renaming one file', () => {
     });
   }
 );
+
+describe('when moving a glob pattern of multiple files', () => {
+  const source = '/fake/dir/**/*.js';
+  describe('when target is another glob pattern', () => {
+    it('throws because it is not clear what to do with them', () => {
+      ['/fake/other-dir/**/*.js', './**/*.js'].forEach((target: string) => {
+        expect(() => {
+          ruleTester.run('move-files', rule, {
+            valid: [],
+            invalid: [
+              {
+                code: '',
+                errors: [],
+                options: [{ files: { [source]: target } }]
+              }
+            ]
+          });
+        }).toThrowError(ERROR_MULTIPLE_TARGETS(source, target));
+      });
+    });
+  });
+
+  describe('when target is an absolute path to a directory', () => {
+    it('throws because this feature is not implemented', () => {
+      ['/fake/other-dir', '/fake/other-dir/'].forEach((target: string) => {
+        expect(() => {
+          ruleTester.run('move-files', rule, {
+            valid: [],
+            invalid: [
+              {
+                code: '',
+                errors: [],
+                options: [{ files: { [source]: target } }]
+              }
+            ]
+          });
+        }).toThrowError(ERROR_FLAT_DIRECTORY(source, target));
+      });
+    });
+  });
+
+  describe('when target is a relative path', () => {
+    const changes = [
+      {
+        filePath: ['/fake/dir/file-a.js', '/fake/dir/nested/file-a.js'],
+        contents: [
+          `
+          import { b } from './b/file-b';
+          import { c } from './b/c/file-c';
+          export const a = 1;
+          `,
+          `
+          import { b } from '../b/nested/file-b';
+          import { c } from '../b/c/nested/file-c';
+          export const a = 1;
+          `
+        ]
+      },
+      {
+        filePath: ['/fake/dir/b/file-b.js', '/fake/dir/b/nested/file-b.js'],
+        contents: [
+          `
+          import { a } from '../file-a';
+          import { c } from './c/file-c';
+          export const b = 2;
+          `,
+          `
+          import { a } from '../../nested/file-a';
+          import { c } from '../c/nested/file-c';
+          export const b = 2;
+          `
+        ]
+      },
+      {
+        filePath: ['/fake/dir/b/c/file-c.js', '/fake/dir/b/c/nested/file-c.js'],
+        contents: [
+          `
+          import { a } from '../../file-a';
+          import { b } from '../file-b';
+          export const c = 3;
+          `,
+          `
+          import { a } from '../../../nested/file-a';
+          import { b } from '../../nested/file-b';
+          export const c = 3;
+          `
+        ]
+      }
+    ];
+
+    beforeEach(() => {
+      mock({
+        [changes[0].filePath[0]]: changes[0].contents[0],
+        [changes[1].filePath[0]]: changes[1].contents[0],
+        [changes[2].filePath[0]]: changes[2].contents[0]
+      });
+    });
+
+    afterEach(() => {
+      mock.restore();
+    });
+
+    it('moves each file to the target relative to itself', (done) => {
+      ruleTester.run('move-files', rule, {
+        valid: [],
+        invalid: changes.map(({ contents, filePath }) => ({
+          code: contents[0],
+          errors: [{ message: `${filePath[0]} has moved to ${filePath[1]}` }],
+          filename: filePath[0],
+          options: [{ files: { [source]: './nested' } }],
+          output: contents[1]
+        }))
+      });
+
+      process.nextTick(() => {
+        // ESLint's RuleTester does not write to Disk, but we can assert that:
+        // 1. The File in its old location had its imports updated (via the
+        //    `output` property above).
+        // 2. A file was written in the new location containing the *old*
+        //    contents, in reality this would be the new contents with the
+        //    updated imports.
+        changes.forEach(({ contents, filePath }) => {
+          expect(readTextFileSync(filePath[1])).toEqual(contents[0]);
+        });
+        done();
+      });
+    });
+  });
+});

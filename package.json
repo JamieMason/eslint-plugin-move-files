@@ -4,8 +4,14 @@
   "version": "0.0.0",
   "author": "Jamie Mason (https://github.com/JamieMason)",
   "bugs": "https://github.com/JamieMason/eslint-plugin-move-files/issues",
+  "dependencies": {
+    "fs-extra": "8.1.0",
+    "glob": "7.1.4"
+  },
   "devDependencies": {
     "@types/eslint": "4.16.6",
+    "@types/fs-extra": "8.0.0",
+    "@types/glob": "7.1.1",
     "@types/jest": "24.0.15",
     "@types/mock-fs": "3.6.30",
     "@types/node": "12.0.10",
@@ -41,9 +47,5 @@
     "prelint": "npm run format",
     "prepack": "npm run build",
     "test": "jest --runInBand"
-  },
-  "dependencies": {
-    "@types/fs-extra": "8.0.0",
-    "fs-extra": "8.1.0"
   }
 }
