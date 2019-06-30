@@ -29,26 +29,66 @@ const rule: Rule.RuleModule = {
     ]
   },
   create: (context) => {
+    const source = context.getSourceCode();
     const files = getIn('options.0.files', context, {});
     const currentFilePath = context.getFilename();
     const dirPath = dirname(currentFilePath);
+    const newFilePath = files[currentFilePath];
+    const isFileBeingMoved = Boolean(newFilePath);
 
     const withLeadingDot = (moduleId: string) =>
-      moduleId.startsWith('.') ? moduleId : `./${moduleId}`;
+      moduleId.startsWith('.') || moduleId.startsWith('/')
+        ? moduleId
+        : `./${moduleId}`;
 
     const withoutFileExtension = (filePath: string) =>
       filePath.replace(/\.[^.]+$/, '');
 
-    const getNewModuleId = (newPath: string) =>
-      withLeadingDot(withoutFileExtension(relative(dirPath, newPath)));
+    const getNewModuleId = (xx: string) =>
+      withLeadingDot(withoutFileExtension(xx));
 
     const withFileExtension = (filePath: string) => {
       try {
         return require.resolve(filePath);
       } catch (e) {
-        return filePath;
+        return `${filePath}.js`;
       }
     };
+
+    if (isFileBeingMoved) {
+      return {
+        'ImportDeclaration[source.value=/^\\./]'(n: EsTree.Node) {
+          const node = n as any;
+          const moduleId = node.source.value;
+          const newDirPath = dirname(newFilePath);
+          if (dirPath !== newDirPath) {
+            const quotes = node.source.raw.charAt(0);
+            const modulePath = withFileExtension(resolve(dirPath, moduleId));
+            const newPathToModule = relative(newDirPath, modulePath);
+            const newModuleId = getNewModuleId(newPathToModule);
+            const withQuotes = `${quotes}${newModuleId}${quotes}`;
+            return context.report({
+              fix(fixer) {
+                return fixer.replaceText(node.source, withQuotes);
+              },
+              message: ERROR_MOVED_FILE(currentFilePath, newFilePath),
+              node: node.source
+            });
+          }
+        },
+        'Program:exit'(n: EsTree.Node) {
+          const node = n as EsTree.Program;
+          context.report({
+            fix(fixer) {
+              moveSync(currentFilePath, newFilePath, { overwrite: true });
+              return fixer.insertTextAfter(node, '');
+            },
+            message: ERROR_MOVED_FILE(currentFilePath, newFilePath),
+            node
+          });
+        }
+      };
+    }
 
     return {
       'CallExpression[callee.name="require"][arguments.0.value=/^\\./]'(
@@ -60,7 +100,7 @@ const rule: Rule.RuleModule = {
         const modulePath = withFileExtension(resolve(dirPath, moduleId));
         const newModulePath = files[modulePath];
         if (newModulePath) {
-          const newModuleId = getNewModuleId(newModulePath);
+          const newModuleId = getNewModuleId(relative(dirPath, newModulePath));
           const withQuotes = `${quotes}${newModuleId}${quotes}`;
           context.report({
             fix: (fixer) => fixer.replaceText(node.arguments[0], withQuotes),
@@ -76,25 +116,11 @@ const rule: Rule.RuleModule = {
         const modulePath = withFileExtension(resolve(dirPath, moduleId));
         const newModulePath = files[modulePath];
         if (newModulePath) {
-          const newModuleId = getNewModuleId(newModulePath);
+          const newModuleId = getNewModuleId(relative(dirPath, newModulePath));
           const withQuotes = `${quotes}${newModuleId}${quotes}`;
           context.report({
             fix: (fixer) => fixer.replaceText(node.source, withQuotes),
             message: ERROR_MOVED_FILE(modulePath, newModulePath),
-            node
-          });
-        }
-      },
-      'Program:exit'(n: EsTree.Node) {
-        const node = n as EsTree.Program;
-        const newFilePath = files[currentFilePath];
-        if (newFilePath) {
-          context.report({
-            fix(fixer) {
-              moveSync(currentFilePath, newFilePath, { overwrite: true });
-              return fixer.insertTextAfter(node, '');
-            },
-            message: ERROR_MOVED_FILE(currentFilePath, newFilePath),
             node
           });
         }
