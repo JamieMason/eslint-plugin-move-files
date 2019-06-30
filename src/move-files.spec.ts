@@ -154,6 +154,7 @@ describe('when renaming one file', () => {
   }) => {
     describe(`when moving one file from ${oldPath} to ${newPath}`, () => {
       const options = [{ files: { [oldPath]: newPath } }];
+      const errors = [{ message: `${oldPath} has moved to ${newPath}` }];
       const consumerContents = `
         import { a } from '${inId}';
       `.trim();
@@ -168,10 +169,6 @@ describe('when renaming one file', () => {
         import { dep } from '${newOutId}';
         export const a = 1;
       `.trim();
-      const errors = [
-        { message: `${oldPath} has moved to ${newPath}` },
-        { message: `${oldPath} has moved to ${newPath}` }
-      ];
 
       describe('when file has already been moved', () => {
         it('is valid', () => {
@@ -204,7 +201,7 @@ describe('when renaming one file', () => {
               },
               {
                 code: consumerContents,
-                errors: [{ message: `${oldPath} has moved to ${newPath}` }],
+                errors,
                 filename: consumerPath,
                 options,
                 output: newConsumerContents
@@ -218,7 +215,6 @@ describe('when renaming one file', () => {
           //    contents, in reality this would be the new contents with the
           //    updated imports.
           expect(readTextFileSync(newPath)).toEqual(fileContents);
-          expect(existsSync(newPath)).toEqual(true);
         });
       });
     });

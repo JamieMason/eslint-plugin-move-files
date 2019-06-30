@@ -5,6 +5,7 @@
     "no-console": [false],
     "no-var-requires": [false],
     "object-literal-sort-keys": [false],
+    "object-literal-key-quotes": false,
     "quotemark": [true, "single"],
     "trailing-comma": [false]
   }

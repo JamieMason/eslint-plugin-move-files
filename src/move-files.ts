@@ -1,6 +1,6 @@
 import { Rule } from 'eslint';
 import * as EsTree from 'estree';
-import { moveSync } from 'fs-extra';
+import { outputFileSync, removeSync } from 'fs-extra';
 import { dirname, relative, resolve } from 'path';
 import { ERROR_MOVED_FILE } from './config';
 import { getIn } from './lib/get-in';
@@ -29,6 +29,7 @@ const rule: Rule.RuleModule = {
     ]
   },
   create: (context) => {
+    const sourceCode = context.getSourceCode();
     const files = getIn('options.0.files', context, {});
     const currentFilePath = context.getFilename();
     const dirPath = dirname(currentFilePath);
@@ -55,10 +56,14 @@ const rule: Rule.RuleModule = {
     };
 
     if (isFileBeingMoved) {
+      const fixes: Array<(fixer: Rule.RuleFixer) => Rule.Fix> = [];
       return {
-        'ImportDeclaration[source.value=/^\\./]'(n: EsTree.Node) {
+        ImportDeclaration(n: EsTree.Node) {
           const node = n as any;
           const moduleId = node.source.value;
+          if (!moduleId.startsWith('.')) {
+            return;
+          }
           const newDirPath = dirname(newFilePath);
           if (dirPath !== newDirPath) {
             const quotes = node.source.raw.charAt(0);
@@ -66,21 +71,18 @@ const rule: Rule.RuleModule = {
             const newPathToModule = relative(newDirPath, modulePath);
             const newModuleId = getNewModuleId(newPathToModule);
             const withQuotes = `${quotes}${newModuleId}${quotes}`;
-            return context.report({
-              fix(fixer) {
-                return fixer.replaceText(node.source, withQuotes);
-              },
-              message: ERROR_MOVED_FILE(currentFilePath, newFilePath),
-              node: node.source
-            });
+            fixes.push((fixer) => fixer.replaceText(node.source, withQuotes));
           }
         },
         'Program:exit'(n: EsTree.Node) {
           const node = n as EsTree.Program;
-          context.report({
+          return context.report({
             fix(fixer) {
-              moveSync(currentFilePath, newFilePath, { overwrite: true });
-              return fixer.insertTextAfter(node, '');
+              const contents = sourceCode.getText();
+              process.nextTick(() => removeSync(currentFilePath));
+              outputFileSync(newFilePath, contents);
+              // ESLint's types don't reflect that an array of fixes can be returned
+              return (fixes.map((fn) => fn(fixer)) as unknown) as Rule.Fix;
             },
             message: ERROR_MOVED_FILE(currentFilePath, newFilePath),
             node
@@ -90,37 +92,41 @@ const rule: Rule.RuleModule = {
     }
 
     return {
-      'CallExpression[callee.name="require"][arguments.0.value=/^\\./]'(
-        n: EsTree.Node
-      ) {
+      'CallExpression[callee.name="require"]'(n: EsTree.Node) {
         const node = n as any;
-        const moduleId = node.arguments[0].value;
+        const moduleId = getIn('arguments.0.value', node, '');
+        if (!moduleId.startsWith('.')) {
+          return;
+        }
         const quotes = node.arguments[0].raw.charAt(0);
         const modulePath = withFileExtension(resolve(dirPath, moduleId));
         const newModulePath = files[modulePath];
         if (newModulePath) {
           const newModuleId = getNewModuleId(relative(dirPath, newModulePath));
           const withQuotes = `${quotes}${newModuleId}${quotes}`;
-          context.report({
+          return context.report({
             fix: (fixer) => fixer.replaceText(node.arguments[0], withQuotes),
             message: ERROR_MOVED_FILE(modulePath, newModulePath),
-            node
+            node: node.arguments[0]
           });
         }
       },
-      'ImportDeclaration[source.value=/^\\./]'(n: EsTree.Node) {
+      ImportDeclaration(n: EsTree.Node) {
         const node = n as any;
         const moduleId = node.source.value;
+        if (!moduleId.startsWith('.')) {
+          return;
+        }
         const quotes = node.source.raw.charAt(0);
         const modulePath = withFileExtension(resolve(dirPath, moduleId));
         const newModulePath = files[modulePath];
         if (newModulePath) {
           const newModuleId = getNewModuleId(relative(dirPath, newModulePath));
           const withQuotes = `${quotes}${newModuleId}${quotes}`;
-          context.report({
+          return context.report({
             fix: (fixer) => fixer.replaceText(node.source, withQuotes),
             message: ERROR_MOVED_FILE(modulePath, newModulePath),
-            node
+            node: node.source
           });
         }
       }
