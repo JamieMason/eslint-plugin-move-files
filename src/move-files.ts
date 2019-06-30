@@ -29,7 +29,6 @@ const rule: Rule.RuleModule = {
     ]
   },
   create: (context) => {
-    const source = context.getSourceCode();
     const files = getIn('options.0.files', context, {});
     const currentFilePath = context.getFilename();
     const dirPath = dirname(currentFilePath);

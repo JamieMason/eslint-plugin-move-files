@@ -24,16 +24,9 @@ describe('when no files are provided', () => {
 });
 
 describe('when renaming one file', () => {
-  const depPath = `/fake/dir/dep.js`;
   const oldPath = `/fake/dir/old-name.js`;
   const newPath = `/fake/dir/new-name.js`;
-  const depContents = `
-    export const dep = 1;
-  `;
-  const fileContents = `
-    import { dep } from './dep';
-    export const a = 1;
-  `;
+  const fileContents = `import { dep } from './dep'; export const a = 1;`;
   const errors = [{ message: `${oldPath} has moved to ${newPath}` }];
   const options = [{ files: { [oldPath]: newPath } }];
 
@@ -48,10 +41,7 @@ describe('when renaming one file', () => {
 
   describe('when file has the old name', () => {
     beforeEach(() => {
-      mock({
-        [depPath]: depContents,
-        [oldPath]: fileContents
-      });
+      mock({ [oldPath]: fileContents });
     });
 
     afterEach(() => {
@@ -137,87 +127,100 @@ describe('when renaming one file', () => {
 
 [
   {
-    depPath: `/fake/old-dir/dep.js`,
-    oldPath: `/fake/old-dir/file.js`,
-    newPath: `/fake/new-dir/file.js`,
-    moduleId: './dep',
-    newModuleId: '../old-dir/dep'
+    consumer: ['/consumer.js', './fake/old-dir/file', './fake/new-dir/file'],
+    dependency: ['./dep', '../old-dir/dep'],
+    filePath: [`/fake/old-dir/file.js`, `/fake/new-dir/file.js`]
   },
   {
-    depPath: `/fake/lib/dep.js`,
-    oldPath: `/fake/file.js`,
-    newPath: `/fake/lib/file.js`,
-    moduleId: './lib/dep',
-    newModuleId: './dep'
+    consumer: ['/fake/dir/lib/consumer.js', '../../file', '../../lib/file'],
+    dependency: ['./lib/dep', './dep'],
+    filePath: [`/fake/file.js`, `/fake/lib/file.js`]
   },
   {
-    depPath: `/dep.js`,
-    oldPath: `/fake/old-dir/name.js`,
-    newPath: `/fake/new-dir/name.js`,
-    moduleId: '../../dep',
-    newModuleId: '../../dep'
+    consumer: ['/fake/old-dir/consumer.js', './name', '../new-dir/name'],
+    dependency: ['../../dep', '../../dep'],
+    filePath: [`/fake/old-dir/name.js`, `/fake/new-dir/name.js`]
   },
   {
-    depPath: `/fake/old-dir/dep.js`,
-    oldPath: `/fake/old-dir/file.js`,
-    newPath: `/file.js`,
-    moduleId: './dep',
-    newModuleId: './fake/old-dir/dep'
+    consumer: ['/fake/new-dir/consumer.js', '../old-dir/file', '../../file'],
+    dependency: ['./dep', './fake/old-dir/dep'],
+    filePath: [`/fake/old-dir/file.js`, `/file.js`]
   }
-].forEach(({ depPath, oldPath, newPath, moduleId, newModuleId }) => {
-  describe(`when moving one file from ${oldPath} to ${newPath}`, () => {
-    const options = [{ files: { [oldPath]: newPath } }];
-    const depContents = `export const dep = 1;`;
-    const fileContents = `import { dep } from '${moduleId}'; export const a = 1;`;
-    const newFileContents = `import { dep } from '${newModuleId}'; export const a = 1;`;
-    const errors = [
-      { message: `${oldPath} has moved to ${newPath}` },
-      { message: `${oldPath} has moved to ${newPath}` }
-    ];
+].forEach(
+  ({
+    consumer: [consumerPath, inId, newInId],
+    dependency: [outId, newOutId],
+    filePath: [oldPath, newPath]
+  }) => {
+    describe(`when moving one file from ${oldPath} to ${newPath}`, () => {
+      const options = [{ files: { [oldPath]: newPath } }];
+      const consumerContents = `
+        import { a } from '${inId}';
+      `.trim();
+      const newConsumerContents = `
+        import { a } from '${newInId}';
+      `.trim();
+      const fileContents = `
+        import { dep } from '${outId}';
+        export const a = 1;
+      `.trim();
+      const newFileContents = `
+        import { dep } from '${newOutId}';
+        export const a = 1;
+      `.trim();
+      const errors = [
+        { message: `${oldPath} has moved to ${newPath}` },
+        { message: `${oldPath} has moved to ${newPath}` }
+      ];
 
-    describe('when file has already been moved', () => {
-      it('is valid', () => {
-        ruleTester.run('move-files', rule, {
-          valid: [{ code: '', filename: newPath, options }],
-          invalid: []
+      describe('when file has already been moved', () => {
+        it('is valid', () => {
+          ruleTester.run('move-files', rule, {
+            valid: [{ code: '', filename: newPath, options }],
+            invalid: []
+          });
+        });
+      });
+
+      describe('when file is in the old location', () => {
+        beforeEach(() => {
+          mock({ [oldPath]: fileContents });
+        });
+
+        afterEach(() => {
+          mock.restore();
+        });
+
+        it('moves the file and updates its imports', () => {
+          ruleTester.run('move-files', rule, {
+            valid: [],
+            invalid: [
+              {
+                code: fileContents,
+                errors,
+                filename: oldPath,
+                options,
+                output: newFileContents
+              },
+              {
+                code: consumerContents,
+                errors: [{ message: `${oldPath} has moved to ${newPath}` }],
+                filename: consumerPath,
+                options,
+                output: newConsumerContents
+              }
+            ]
+          });
+          // ESLint's RuleTester does not write to Disk, but we can assert that:
+          // 1. The File in its old location had its imports updated (via the
+          //    `output` property above).
+          // 2. A file was written in the new location containing the *old*
+          //    contents, in reality this would be the new contents with the
+          //    updated imports.
+          expect(readTextFileSync(newPath)).toEqual(fileContents);
+          expect(existsSync(newPath)).toEqual(true);
         });
       });
     });
-
-    describe('when file is in the old location', () => {
-      beforeEach(() => {
-        mock({
-          [depPath]: depContents,
-          [oldPath]: fileContents
-        });
-      });
-
-      afterEach(() => {
-        mock.restore();
-      });
-
-      it('moves the file and updates its imports', () => {
-        ruleTester.run('move-files', rule, {
-          valid: [],
-          invalid: [
-            {
-              code: fileContents,
-              errors,
-              filename: oldPath,
-              options,
-              output: newFileContents
-            }
-          ]
-        });
-        // ESLint's RuleTester does not write to Disk, but we can assert that:
-        // 1. The File in its old location had its imports updated (via the
-        //    `output` property above).
-        // 2. A file was written in the new location containing the *old*
-        //    contents, in reality this would be the new contents with the
-        //    updated imports.
-        expect(readTextFileSync(newPath)).toEqual(fileContents);
-        expect(existsSync(newPath)).toEqual(true);
-      });
-    });
-  });
-});
+  }
+);
