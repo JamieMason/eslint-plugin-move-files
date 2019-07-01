@@ -1,4 +1,4 @@
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import * as mock from 'mock-fs';
 import { ERROR_FLAT_DIRECTORY, ERROR_MULTIPLE_TARGETS } from './config';
 import rule from './move-files';
@@ -49,7 +49,7 @@ describe('when renaming one file', () => {
       mock.restore();
     });
 
-    it('renames the file', () => {
+    it('renames the file', (done) => {
       ruleTester.run('move-files', rule, {
         valid: [],
         invalid: [
@@ -61,8 +61,12 @@ describe('when renaming one file', () => {
           }
         ]
       });
-      const newPathContents = readFileSync(newPath, { encoding: 'utf8' });
-      expect(newPathContents).toEqual(fileContents);
+
+      process.nextTick(() => {
+        expect(existsSync(oldPath)).toEqual(false);
+        expect(readTextFileSync(newPath)).toEqual(fileContents);
+        done();
+      });
     });
 
     it('updates imports to the renamed file', () => {
@@ -157,16 +161,20 @@ describe('when renaming one file', () => {
       const options = [{ files: { [oldPath]: newPath } }];
       const errors = [{ message: `${oldPath} has moved to ${newPath}` }];
       const consumerContents = `
+        import lodash from 'lodash';
         import { a } from '${inId}';
       `.trim();
       const newConsumerContents = `
+        import lodash from 'lodash';
         import { a } from '${newInId}';
       `.trim();
       const fileContents = `
+        import ramda from 'ramda';
         import { dep } from '${outId}';
         export const a = 1;
       `.trim();
       const newFileContents = `
+        import ramda from 'ramda';
         import { dep } from '${newOutId}';
         export const a = 1;
       `.trim();
@@ -189,7 +197,7 @@ describe('when renaming one file', () => {
           mock.restore();
         });
 
-        it('moves the file and updates its imports', () => {
+        it('moves the file and updates its imports', (done) => {
           ruleTester.run('move-files', rule, {
             valid: [],
             invalid: [
@@ -209,13 +217,18 @@ describe('when renaming one file', () => {
               }
             ]
           });
-          // ESLint's RuleTester does not write to Disk, but we can assert that:
-          // 1. The File in its old location had its imports updated (via the
-          //    `output` property above).
-          // 2. A file was written in the new location containing the *old*
-          //    contents, in reality this would be the new contents with the
-          //    updated imports.
-          expect(readTextFileSync(newPath)).toEqual(fileContents);
+
+          process.nextTick(() => {
+            // ESLint's RuleTester does not write to Disk, but we can assert that:
+            // 1. The File in its old location had its imports updated (via the
+            //    `output` property above).
+            // 2. A file was written in the new location containing the *old*
+            //    contents, in reality this would be the new contents with the
+            //    updated imports.
+            expect(existsSync(oldPath)).toEqual(false);
+            expect(readTextFileSync(newPath)).toEqual(fileContents);
+            done();
+          });
         });
       });
     });
@@ -343,6 +356,7 @@ describe('when moving a glob pattern of multiple files', () => {
         //    contents, in reality this would be the new contents with the
         //    updated imports.
         changes.forEach(({ contents, filePath }) => {
+          expect(existsSync(filePath[0])).toEqual(false);
           expect(readTextFileSync(filePath[1])).toEqual(contents[0]);
         });
         done();
