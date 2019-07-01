@@ -275,7 +275,8 @@ describe('when moving a glob pattern of multiple files', () => {
     });
   });
 
-  describe('when target is a relative path', () => {
+  describe('when target is a relative path to a directory', () => {
+    const target = './nested';
     const changes = [
       {
         filePath: ['/fake/dir/file-a.js', '/fake/dir/nested/file-a.js'],
@@ -336,14 +337,107 @@ describe('when moving a glob pattern of multiple files', () => {
       mock.restore();
     });
 
-    it('moves each file to the target relative to itself', (done) => {
+    it('moves each file to the target directory relative to itself', (done) => {
       ruleTester.run('move-files', rule, {
         valid: [],
         invalid: changes.map(({ contents, filePath }) => ({
           code: contents[0],
           errors: [{ message: `${filePath[0]} has moved to ${filePath[1]}` }],
           filename: filePath[0],
-          options: [{ files: { [source]: './nested' } }],
+          options: [{ files: { [source]: target } }],
+          output: contents[1]
+        }))
+      });
+
+      process.nextTick(() => {
+        // ESLint's RuleTester does not write to Disk, but we can assert that:
+        // 1. The File in its old location had its imports updated (via the
+        //    `output` property above).
+        // 2. A file was written in the new location containing the *old*
+        //    contents, in reality this would be the new contents with the
+        //    updated imports.
+        changes.forEach(({ contents, filePath }) => {
+          expect(existsSync(filePath[0])).toEqual(false);
+          expect(readTextFileSync(filePath[1])).toEqual(contents[0]);
+        });
+        done();
+      });
+    });
+  });
+
+  describe('when target is a relative path to a file', () => {
+    const target = './nested/new-file.js';
+    const changes = [
+      {
+        filePath: ['/fake/dir/file-a.js', '/fake/dir/nested/new-file.js'],
+        contents: [
+          `
+          import { b } from './b/file-b';
+          import { c } from './b/c/file-c';
+          export const a = 1;
+          `,
+          `
+          import { b } from '../b/nested/new-file';
+          import { c } from '../b/c/nested/new-file';
+          export const a = 1;
+          `
+        ]
+      },
+      {
+        filePath: ['/fake/dir/b/file-b.js', '/fake/dir/b/nested/new-file.js'],
+        contents: [
+          `
+          import { a } from '../file-a';
+          import { c } from './c/file-c';
+          export const b = 2;
+          `,
+          `
+          import { a } from '../../nested/new-file';
+          import { c } from '../c/nested/new-file';
+          export const b = 2;
+          `
+        ]
+      },
+      {
+        filePath: [
+          '/fake/dir/b/c/file-c.js',
+          '/fake/dir/b/c/nested/new-file.js'
+        ],
+        contents: [
+          `
+          import { a } from '../../file-a';
+          import { b } from '../file-b';
+          export const c = 3;
+          `,
+          `
+          import { a } from '../../../nested/new-file';
+          import { b } from '../../nested/new-file';
+          export const c = 3;
+          `
+        ]
+      }
+    ];
+
+    beforeEach(() => {
+      mock({
+        [changes[0].filePath[0]]: changes[0].contents[0],
+        [changes[1].filePath[0]]: changes[1].contents[0],
+        [changes[2].filePath[0]]: changes[2].contents[0]
+      });
+    });
+
+    afterEach(() => {
+      mock.restore();
+    });
+
+    it('moves each file to the target location relative to itself', (done) => {
+      ruleTester.run('move-files', rule, {
+        valid: [],
+        invalid: changes.map(({ contents, filePath }) => ({
+          code: contents[0],
+          errors: [{ message: `${filePath[0]} has moved to ${filePath[1]}` }],
+          filename: filePath[0],
+          options: [{ files: { [source]: target } }],
           output: contents[1]
         }))
       });

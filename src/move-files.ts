@@ -46,6 +46,7 @@ const rule: Rule.RuleModule = {
       const sourceIsGlob = glob.hasMagic(source);
       const targetIsGlob = glob.hasMagic(target);
       const targetIsRelativePath = !targetIsGlob && target.startsWith('.');
+      const targetIsDirectoryLike = !basename(target).includes('.');
 
       if (sourceIsGlob && targetIsGlob) {
         throw new Error(ERROR_MULTIPLE_TARGETS(source, target));
@@ -53,10 +54,9 @@ const rule: Rule.RuleModule = {
 
       if (sourceIsGlob && targetIsRelativePath) {
         return glob.sync(source).forEach((sourceFile) => {
-          files[sourceFile] = join(
-            resolve(dirname(sourceFile), target),
-            basename(sourceFile)
-          );
+          files[sourceFile] = targetIsDirectoryLike
+            ? join(resolve(dirname(sourceFile), target), basename(sourceFile))
+            : resolve(dirname(sourceFile), target);
         });
       }
 
@@ -81,8 +81,8 @@ const rule: Rule.RuleModule = {
     const withoutFileExtension = (filePath: string) =>
       filePath.replace(/\.[^.]+$/, '');
 
-    const getNewModuleId = (xx: string) =>
-      withLeadingDot(withoutFileExtension(xx));
+    const getNewModuleId = (filePath: string) =>
+      withLeadingDot(withoutFileExtension(filePath));
 
     const withFileExtension = (filePath: string) => {
       try {
