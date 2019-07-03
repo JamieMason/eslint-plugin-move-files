@@ -1,9 +1,33 @@
+import { RuleTester } from 'eslint';
 import { existsSync, readFileSync } from 'fs';
 import * as mock from 'mock-fs';
 import { resolve } from 'path';
-import { ERROR_FLAT_DIRECTORY, ERROR_MULTIPLE_TARGETS } from './config';
 import rule from './move-files';
 import { ruleTester } from './test/rule-tester';
+
+type OldPath = string;
+type NewPath = string;
+type ConsumerPath = string;
+type OldModuleId = string;
+type NewModuleId = string;
+
+interface File {
+  path: [OldPath, NewPath?];
+  consumers: Array<[ConsumerPath, OldModuleId, NewModuleId]>;
+  imports: Array<[OldModuleId, NewModuleId]>;
+}
+
+type Target = string;
+
+interface TestCase {
+  description: string;
+  fileSystem: File[];
+  options: {
+    files: {
+      [source: string]: Target;
+    };
+  };
+}
 
 const readTextFileSync = (filePath: string) =>
   readFileSync(filePath, { encoding: 'utf8' });
@@ -25,444 +49,326 @@ describe('when no files are provided', () => {
   });
 });
 
-describe('when renaming one file', () => {
-  const oldPath = `./fake/dir/old-name.js`;
-  const newPath = `./fake/dir/new-name.js`;
-  const fileContents = `import { dep } from './dep'; export const a = 1;`;
-  const errors = [{ message: `${oldPath} has moved to ${newPath}` }];
-  const options = [{ files: { [oldPath]: './new-name.js' } }];
-
-  describe('when file already has the new name', () => {
-    it('is valid', () => {
-      ruleTester.run('move-files', rule, {
-        valid: [{ code: '', filename: resolve(newPath), options }],
-        invalid: []
-      });
-    });
-  });
-
-  describe('when file has the old name', () => {
-    beforeEach(() => {
-      mock({ [oldPath]: fileContents });
-    });
-
-    afterEach(() => {
-      mock.restore();
-    });
-
-    it('renames the file', (done) => {
-      ruleTester.run('move-files', rule, {
-        valid: [],
-        invalid: [
-          {
-            code: fileContents,
-            errors,
-            filename: resolve(oldPath),
-            options
-          }
-        ]
-      });
-
-      process.nextTick(() => {
-        expect(existsSync(oldPath)).toEqual(false);
-        expect(readTextFileSync(newPath)).toEqual(fileContents);
-        done();
-      });
-    });
-
-    it('updates imports to the renamed file', () => {
-      ruleTester.run('move-files', rule, {
-        valid: [
-          {
-            code: `import { a } from './new-name';`,
-            filename: resolve(`./fake/dir/sibling.js`)
-          },
-          {
-            code: `import { a } from '../new-name';`,
-            filename: resolve(`./fake/dir/dir/child.js`)
-          },
-          {
-            code: `import { a } from './fake/dir/new-name';`,
-            filename: resolve(`./parent.js`)
-          }
+const testCases: TestCase[] = [
+  {
+    description: 'rename a file in-place',
+    fileSystem: [
+      {
+        path: ['./src/rename-me.js', './src/renamed.js'],
+        consumers: [['./src/consumer.js', './rename-me', './renamed']],
+        imports: []
+      }
+    ],
+    options: {
+      files: {
+        './src/rename-me.js': './renamed.js'
+      }
+    }
+  },
+  {
+    description: 'move a file into a sibling of its current directory',
+    fileSystem: [
+      {
+        path: ['./src/server.test.js', './test/server.js'],
+        consumers: [],
+        imports: []
+      }
+    ],
+    options: {
+      files: {
+        './src/server.test.js': '../test/server.js'
+      }
+    }
+  },
+  {
+    description: 'convert a flat directory of files into module folders',
+    fileSystem: [
+      {
+        path: ['./src/services/a.js', './src/services/a/index.js'],
+        consumers: [],
+        imports: []
+      },
+      {
+        path: ['./src/services/b.js', './src/services/b/index.js'],
+        consumers: [],
+        imports: []
+      }
+    ],
+    options: {
+      files: {
+        './src/services/*.js': './{name}/index.js'
+      }
+    }
+  },
+  {
+    description: 'use .jsx extension in all React components',
+    fileSystem: [
+      {
+        path: ['./src/components/Button.js', './src/components/Button.jsx'],
+        consumers: [],
+        imports: []
+      },
+      {
+        path: [
+          './src/components/Panel/lib/Header.js',
+          './src/components/Panel/lib/Header.jsx'
         ],
-        invalid: [
-          {
-            code: `import { a } from './old-name';`,
-            filename: resolve(`./fake/dir/sibling.js`),
-            output: `import { a } from './new-name';`
-          },
-          {
-            code: `import { a } from '../old-name';`,
-            filename: resolve(`./fake/dir/dir/child.js`),
-            output: `import { a } from '../new-name';`
-          },
-          {
-            code: `import { a } from './fake/dir/old-name';`,
-            filename: resolve(`./parent.js`),
-            output: `import { a } from './fake/dir/new-name';`
-          }
-        ].map((spec) => ({ ...spec, errors, options }))
-      });
-    });
-
-    it('updates requires to the renamed file', () => {
-      ruleTester.run('move-files', rule, {
-        valid: [],
-        invalid: [
-          {
-            code: `const { a } = require('./old-name');`,
-            filename: resolve(`./fake/dir/sibling.js`),
-            output: `const { a } = require('./new-name');`
-          },
-          {
-            code: `const { a } = require('../old-name');`,
-            filename: resolve(`./fake/dir/dir/child.js`),
-            output: `const { a } = require('../new-name');`
-          },
-          {
-            code: `const { a } = require('./fake/dir/old-name');`,
-            filename: resolve(`./parent.js`),
-            output: `const { a } = require('./fake/dir/new-name');`
-          }
-        ].map((spec) => ({ ...spec, errors, options }))
-      });
-    });
-  });
-});
+        consumers: [],
+        imports: []
+      }
+    ],
+    options: {
+      files: {
+        './src/components/**/*.js': './{name}.jsx'
+      }
+    }
+  },
+  {
+    description: 'locate tests alongside source',
+    fileSystem: [
+      {
+        path: ['./test/main.js', './src/main.spec.js'],
+        consumers: [],
+        imports: [['../src/main', './main']]
+      },
+      {
+        path: ['./test/a/a.js', './src/a/a.spec.js'],
+        consumers: [],
+        imports: [['../../src/a/a', './a']]
+      },
+      {
+        path: ['./test/a/b/b.js', './src/a/b/b.spec.js'],
+        consumers: [],
+        imports: [['../../../src/a/b/b', './b']]
+      },
+      {
+        path: ['./test/a/b/c/c.js', './src/a/b/c/c.spec.js'],
+        consumers: [],
+        imports: [['../../../../src/a/b/c/c', './c']]
+      }
+    ],
+    options: {
+      files: {
+        './test/*.js': '{rootDir}/src/{name}.spec.js',
+        './test/*/*.js': '{rootDir}/src/{..}/{name}.spec.js',
+        './test/*/*/*.js': '{rootDir}/src/{...}/{..}/{name}.spec.js',
+        './test/*/*/*/*.js': '{rootDir}/src/{....}/{...}/{..}/{name}.spec.js'
+      }
+    }
+  },
+  {
+    description: 'when target is a relative path to a directory',
+    fileSystem: [
+      {
+        path: ['./src/a.js', './src/nested/a.js'],
+        consumers: [],
+        imports: []
+      },
+      {
+        path: ['./src/b/b.js', './src/b/nested/b.js'],
+        consumers: [],
+        imports: []
+      },
+      {
+        path: ['./src/b/c/c.js', './src/b/c/nested/c.js'],
+        consumers: [],
+        imports: []
+      }
+    ],
+    options: {
+      files: {
+        './src/**/*.js': './nested'
+      }
+    }
+  },
+  {
+    description: 'convert files with a specific name into module folders',
+    fileSystem: [
+      {
+        path: ['./src/button/story.js', './src/button/story/index.js'],
+        consumers: [],
+        imports: []
+      }
+    ],
+    options: {
+      files: {
+        './**/story.js': './story/index.js'
+      }
+    }
+  },
+  {
+    description:
+      'ignores glob targets because it is not clear what to do with them',
+    fileSystem: [
+      {
+        path: ['./src/a.js'],
+        consumers: [],
+        imports: []
+      }
+    ],
+    options: {
+      files: {
+        './src/a.js': './**/*.js'
+      }
+    }
+  },
+  {
+    description: 'move multiple files into the same directory',
+    fileSystem: [
+      {
+        path: ['./src/a.js', './dir/a.js'],
+        consumers: [],
+        imports: []
+      }
+    ],
+    options: {
+      files: {
+        './src/*.js': '{rootDir}/dir',
+        './src/a.js': '{rootDir}/dir/'
+      }
+    }
+  },
+  {
+    description: 'move multiple interdependent files',
+    fileSystem: [
+      {
+        path: ['./fake/dir/file-a.js', './fake/dir/nested/new-file.js'],
+        consumers: [],
+        imports: [
+          ['./b/file-b', '../b/nested/new-file'],
+          ['./b/c/file-c', '../b/c/nested/new-file']
+        ]
+      },
+      {
+        path: ['./fake/dir/b/file-b.js', './fake/dir/b/nested/new-file.js'],
+        consumers: [],
+        imports: [
+          ['../file-a', '../../nested/new-file'],
+          ['./c/file-c', '../c/nested/new-file']
+        ]
+      },
+      {
+        path: ['./fake/dir/b/c/file-c.js', './fake/dir/b/c/nested/new-file.js'],
+        consumers: [],
+        imports: [
+          ['../../file-a', '../../../nested/new-file'],
+          ['../file-b', '../../nested/new-file']
+        ]
+      }
+    ],
+    options: {
+      files: {
+        './fake/dir/**/*.js': './nested/new-file.js'
+      }
+    }
+  }
+];
 
 [
-  {
-    consumer: ['./consumer.js', './fake/old-dir/file', './fake/new-dir/file'],
-    dependency: ['./dep', '../old-dir/dep'],
-    filePath: [`./fake/old-dir/file.js`, `./fake/new-dir/file.js`],
-    target: '../new-dir/file.js'
-  },
-  {
-    consumer: ['./fake/dir/lib/consumer.js', '../../file', '../../lib/file'],
-    dependency: ['./lib/dep', './dep'],
-    filePath: [`./fake/file.js`, `./fake/lib/file.js`],
-    target: './lib/file.js'
-  },
-  {
-    consumer: ['./fake/old-dir/consumer.js', './name', '../new-dir/name'],
-    dependency: ['../../dep', '../../dep'],
-    filePath: [`./fake/old-dir/name.js`, `./fake/new-dir/name.js`],
-    target: '../new-dir/name.js'
-  },
-  {
-    consumer: ['./fake/new-dir/consumer.js', '../old-dir/file', '../../file'],
-    dependency: ['./dep', './fake/old-dir/dep'],
-    filePath: [`./fake/old-dir/file.js`, `./file.js`],
-    target: '../../file.js'
-  }
-].forEach(
-  ({
-    consumer: [consumerPath, inId, newInId],
-    dependency: [outId, newOutId],
-    filePath: [oldPath, newPath],
-    target
-  }) => {
-    describe(`when moving one file from ${oldPath} to ${newPath}`, () => {
-      const options = [{ files: { [oldPath]: target } }];
-      const errors = [{ message: `${oldPath} has moved to ${newPath}` }];
-      const consumerContents = `
-        import lodash from 'lodash';
-        import { a } from '${inId}';
-      `.trim();
-      const newConsumerContents = `
-        import lodash from 'lodash';
-        import { a } from '${newInId}';
-      `.trim();
-      const fileContents = `
-        import ramda from 'ramda';
-        import { dep } from '${outId}';
-        export const a = 1;
-      `.trim();
-      const newFileContents = `
-        import ramda from 'ramda';
-        import { dep } from '${newOutId}';
-        export const a = 1;
-      `.trim();
+  (moduleId: string) => `import '${moduleId}';`,
+  (moduleId: string) => `require('${moduleId}');`
+].forEach((getCode) => {
+  describe(`when importing using ${getCode('ModuleID')}`, () => {
+    testCases.forEach(({ description, fileSystem, options: { files } }) => {
+      describe(description, () => {
+        const OLD = 0;
+        const NEW = 1;
+        const valid: RuleTester.ValidTestCase[] = [];
+        const invalid: RuleTester.InvalidTestCase[] = [];
+        const mockFileSystem: mock.Config = {};
+        const contentsChecks: Array<() => void> = [];
 
-      describe('when file has already been moved', () => {
-        it('is valid', () => {
-          ruleTester.run('move-files', rule, {
-            valid: [{ code: '', filename: resolve(newPath), options }],
-            invalid: []
+        fileSystem.forEach(({ consumers, imports, path }) => {
+          const getPath = (i: number) => path[i];
+          const getAbsolutePath = (i: number) => resolve(path[i] as string);
+
+          const isFileMove = path.length === 2;
+          const hasConsumers = consumers.length > 0;
+          const oldPath = getPath(OLD);
+          const oldAbsPath = getAbsolutePath(OLD);
+          let code = [
+            `/* ${oldPath} */`,
+            getCode('pkg'),
+            getCode('@scope/pkg')
+          ].join('\n');
+          let output = code;
+
+          if (imports.length > 0) {
+            imports.forEach(([oldModuleId, newModuleId]) => {
+              code += getCode(oldModuleId);
+              output += getCode(newModuleId);
+            });
+          }
+
+          // should do nothing when file is not configured to move
+          if (!isFileMove) {
+            return valid.push({
+              code,
+              filename: oldAbsPath,
+              options: [{ files }]
+            });
+          }
+
+          const newPath = getPath(NEW);
+          const newAbsPath = getAbsolutePath(NEW);
+
+          // should update imports of files consuming moved file
+          if (hasConsumers) {
+            consumers.forEach(([consumerPath, oldId, newId]) => {
+              invalid.push({
+                code: getCode(oldId),
+                errors: [{ message: `${oldPath} has moved to ${newPath}` }],
+                filename: resolve(consumerPath),
+                options: [{ files }],
+                output: getCode(newId)
+              });
+            });
+          }
+
+          // should do nothing when file is already in new location
+          valid.push({
+            code: `/* ${newPath} */`,
+            filename: newAbsPath,
+            options: [{ files }]
+          });
+
+          // should move file and update imports when in old location
+          invalid.push({
+            code,
+            errors: [{ message: `${oldPath} has moved to ${newPath}` }],
+            filename: oldAbsPath,
+            options: [{ files }],
+            output
+          });
+
+          // ESLint's RuleTester does not write to Disk, but we can assert that:
+          // 1. The File in its old location had its imports updated (via the
+          //    `output` property above).
+          // 2. A file was written in the new location containing the *old*
+          //    contents, in reality this would be the new contents with the
+          //    updated imports.
+          mockFileSystem[oldPath as string] = code;
+          contentsChecks.push(() => {
+            expect(existsSync(oldAbsPath)).toEqual(false);
+            expect(readTextFileSync(newAbsPath)).toEqual(code);
           });
         });
-      });
 
-      describe('when file is in the old location', () => {
-        beforeEach(() => {
-          mock({ [oldPath]: fileContents });
+        beforeAll(() => {
+          mock(mockFileSystem);
         });
 
-        afterEach(() => {
+        afterAll(() => {
           mock.restore();
         });
 
-        it('moves the file and updates its imports', (done) => {
-          ruleTester.run('move-files', rule, {
-            valid: [],
-            invalid: [
-              {
-                code: fileContents,
-                errors,
-                filename: resolve(oldPath),
-                options,
-                output: newFileContents
-              },
-              {
-                code: consumerContents,
-                errors,
-                filename: resolve(consumerPath),
-                options,
-                output: newConsumerContents
-              }
-            ]
-          });
-
+        it('moves files which should move', (done) => {
+          ruleTester.run('move-files', rule, { valid, invalid });
           process.nextTick(() => {
-            // ESLint's RuleTester does not write to Disk, but we can assert that:
-            // 1. The File in its old location had its imports updated (via the
-            //    `output` property above).
-            // 2. A file was written in the new location containing the *old*
-            //    contents, in reality this would be the new contents with the
-            //    updated imports.
-            expect(existsSync(resolve(oldPath))).toEqual(false);
-            expect(readTextFileSync(resolve(newPath))).toEqual(fileContents);
+            contentsChecks.forEach((contentsCheck) => contentsCheck());
             done();
           });
         });
-      });
-    });
-  }
-);
-
-describe('when moving a glob pattern of multiple files', () => {
-  const source = './fake/dir/**/*.js';
-  describe('when target is another glob pattern', () => {
-    it('throws because it is not clear what to do with them', () => {
-      ['./fake/other-dir/**/*.js', './**/*.js'].forEach((target: string) => {
-        expect(() => {
-          ruleTester.run('move-files', rule, {
-            valid: [],
-            invalid: [
-              {
-                code: '',
-                errors: [],
-                options: [{ files: { [source]: target } }]
-              }
-            ]
-          });
-        }).toThrowError(ERROR_MULTIPLE_TARGETS(source, target));
-      });
-    });
-  });
-
-  describe('when target is an absolute path to a directory', () => {
-    it('throws because this feature is not implemented', () => {
-      ['/fake/other-dir', '/fake/other-dir/'].forEach((target: string) => {
-        expect(() => {
-          ruleTester.run('move-files', rule, {
-            valid: [],
-            invalid: [
-              {
-                code: '',
-                errors: [],
-                options: [{ files: { [source]: target } }]
-              }
-            ]
-          });
-        }).toThrowError(ERROR_FLAT_DIRECTORY(source, target));
-      });
-    });
-  });
-
-  describe('when target is a relative path to a directory', () => {
-    const target = './nested';
-    const changes = [
-      {
-        filePath: ['./fake/dir/file-a.js', './fake/dir/nested/file-a.js'],
-        contents: [
-          `
-          import { b } from './b/file-b';
-          import { c } from './b/c/file-c';
-          export const a = 1;
-          `,
-          `
-          import { b } from '../b/nested/file-b';
-          import { c } from '../b/c/nested/file-c';
-          export const a = 1;
-          `
-        ]
-      },
-      {
-        filePath: ['./fake/dir/b/file-b.js', './fake/dir/b/nested/file-b.js'],
-        contents: [
-          `
-          import { a } from '../file-a';
-          import { c } from './c/file-c';
-          export const b = 2;
-          `,
-          `
-          import { a } from '../../nested/file-a';
-          import { c } from '../c/nested/file-c';
-          export const b = 2;
-          `
-        ]
-      },
-      {
-        filePath: [
-          './fake/dir/b/c/file-c.js',
-          './fake/dir/b/c/nested/file-c.js'
-        ],
-        contents: [
-          `
-          import { a } from '../../file-a';
-          import { b } from '../file-b';
-          export const c = 3;
-          `,
-          `
-          import { a } from '../../../nested/file-a';
-          import { b } from '../../nested/file-b';
-          export const c = 3;
-          `
-        ]
-      }
-    ];
-
-    beforeEach(() => {
-      mock({
-        [changes[0].filePath[0]]: changes[0].contents[0],
-        [changes[1].filePath[0]]: changes[1].contents[0],
-        [changes[2].filePath[0]]: changes[2].contents[0]
-      });
-    });
-
-    afterEach(() => {
-      mock.restore();
-    });
-
-    it('moves each file to the target directory relative to itself', (done) => {
-      ruleTester.run('move-files', rule, {
-        valid: [],
-        invalid: changes.map(({ contents, filePath }) => ({
-          code: contents[0],
-          errors: [{ message: `${filePath[0]} has moved to ${filePath[1]}` }],
-          filename: resolve(filePath[0]),
-          options: [{ files: { [source]: target } }],
-          output: contents[1]
-        }))
-      });
-
-      process.nextTick(() => {
-        // ESLint's RuleTester does not write to Disk, but we can assert that:
-        // 1. The File in its old location had its imports updated (via the
-        //    `output` property above).
-        // 2. A file was written in the new location containing the *old*
-        //    contents, in reality this would be the new contents with the
-        //    updated imports.
-        changes.forEach(({ contents, filePath }) => {
-          expect(existsSync(resolve(filePath[0]))).toEqual(false);
-          expect(readTextFileSync(resolve(filePath[1]))).toEqual(contents[0]);
-        });
-        done();
-      });
-    });
-  });
-
-  describe('when target is a relative path to a file', () => {
-    const target = './nested/new-file.js';
-    const changes = [
-      {
-        filePath: ['./fake/dir/file-a.js', './fake/dir/nested/new-file.js'],
-        contents: [
-          `
-          import { b } from './b/file-b';
-          import { c } from './b/c/file-c';
-          export const a = 1;
-          `,
-          `
-          import { b } from '../b/nested/new-file';
-          import { c } from '../b/c/nested/new-file';
-          export const a = 1;
-          `
-        ]
-      },
-      {
-        filePath: ['./fake/dir/b/file-b.js', './fake/dir/b/nested/new-file.js'],
-        contents: [
-          `
-          import { a } from '../file-a';
-          import { c } from './c/file-c';
-          export const b = 2;
-          `,
-          `
-          import { a } from '../../nested/new-file';
-          import { c } from '../c/nested/new-file';
-          export const b = 2;
-          `
-        ]
-      },
-      {
-        filePath: [
-          './fake/dir/b/c/file-c.js',
-          './fake/dir/b/c/nested/new-file.js'
-        ],
-        contents: [
-          `
-          import { a } from '../../file-a';
-          import { b } from '../file-b';
-          export const c = 3;
-          `,
-          `
-          import { a } from '../../../nested/new-file';
-          import { b } from '../../nested/new-file';
-          export const c = 3;
-          `
-        ]
-      }
-    ];
-
-    beforeEach(() => {
-      mock({
-        [changes[0].filePath[0]]: changes[0].contents[0],
-        [changes[1].filePath[0]]: changes[1].contents[0],
-        [changes[2].filePath[0]]: changes[2].contents[0]
-      });
-    });
-
-    afterEach(() => {
-      mock.restore();
-    });
-
-    it('moves each file to the target location relative to itself', (done) => {
-      ruleTester.run('move-files', rule, {
-        valid: [],
-        invalid: changes.map(({ contents, filePath }) => ({
-          code: contents[0],
-          errors: [{ message: `${filePath[0]} has moved to ${filePath[1]}` }],
-          filename: resolve(filePath[0]),
-          options: [{ files: { [source]: target } }],
-          output: contents[1]
-        }))
-      });
-
-      process.nextTick(() => {
-        // ESLint's RuleTester does not write to Disk, but we can assert that:
-        // 1. The File in its old location had its imports updated (via the
-        //    `output` property above).
-        // 2. A file was written in the new location containing the *old*
-        //    contents, in reality this would be the new contents with the
-        //    updated imports.
-        changes.forEach(({ contents, filePath }) => {
-          expect(existsSync(resolve(filePath[0]))).toEqual(false);
-          expect(readTextFileSync(resolve(filePath[1]))).toEqual(contents[0]);
-        });
-        done();
       });
     });
   });

@@ -3,12 +3,9 @@ import * as EsTree from 'estree';
 import { outputFileSync, removeSync } from 'fs-extra';
 import * as glob from 'glob';
 import { basename, dirname, join, relative, resolve } from 'path';
-import {
-  ERROR_FLAT_DIRECTORY,
-  ERROR_MOVED_FILE,
-  ERROR_MULTIPLE_TARGETS
-} from './config';
+import { ERROR_MOVED_FILE } from './config';
 import { getIn } from './lib/get-in';
+import { interpolate } from './lib/path-reader';
 
 interface FileIndex {
   [source: string]: string;
@@ -42,31 +39,19 @@ const rule: Rule.RuleModule = {
     const patterns: FileIndex = getIn('options.0.files', context, {});
     const files: FileIndex = {};
 
-    Object.entries(patterns).forEach(([source, target]) => {
-      const sourceIsGlob = glob.hasMagic(source);
-      const targetIsGlob = glob.hasMagic(target);
-      const targetIsRelativePath = !targetIsGlob && target.startsWith('.');
-      const targetIsDirectoryLike = !basename(target).includes('.');
-
-      if (sourceIsGlob && targetIsGlob) {
-        throw new Error(ERROR_MULTIPLE_TARGETS(source, target));
-      }
-
-      if (sourceIsGlob && targetIsRelativePath) {
-        return glob.sync(source, { absolute: true }).forEach((sourceFile) => {
-          files[sourceFile] = targetIsDirectoryLike
-            ? join(resolve(dirname(sourceFile), target), basename(sourceFile))
-            : resolve(dirname(sourceFile), target);
-        });
-      }
-
-      if (sourceIsGlob && !targetIsGlob) {
-        throw new Error(ERROR_FLAT_DIRECTORY(source, target));
-      }
-
-      // plain file to plain file
-      files[resolve(source)] = resolve(dirname(source), target);
-    });
+    Object.entries(patterns)
+      .filter(([_, targetPattern]) => targetPattern.search(/[*+?!|@]/) === -1)
+      .forEach(([sourcePattern, targetPattern]) => {
+        glob
+          .sync(sourcePattern, { absolute: true, nodir: true })
+          .forEach((source) => {
+            const target = interpolate(targetPattern, source);
+            const targetIsDir = !basename(target).includes('.');
+            files[source] = targetIsDir
+              ? join(resolve(dirname(source), target), basename(source))
+              : resolve(dirname(source), target);
+          });
+      });
 
     const currentFilePath = context.getFilename();
     const dirPath = dirname(currentFilePath);
@@ -95,6 +80,25 @@ const rule: Rule.RuleModule = {
     if (isFileBeingMoved) {
       const fixes: Array<(fixer: Rule.RuleFixer) => Rule.Fix> = [];
       return {
+        'CallExpression[callee.name="require"]'(n: EsTree.Node) {
+          const node = n as any;
+          const moduleId = getIn('arguments.0.value', node, '');
+          if (!moduleId.startsWith('.')) {
+            return;
+          }
+          const newDirPath = dirname(newFilePath);
+          if (newDirPath !== dirPath) {
+            const quotes = node.arguments[0].raw.charAt(0);
+            const rawModulePath = withFileExtension(resolve(dirPath, moduleId));
+            const modulePath = files[rawModulePath] || rawModulePath;
+            const newPathToModule = relative(newDirPath, modulePath);
+            const newModuleId = getNewModuleId(newPathToModule);
+            const withQuotes = `${quotes}${newModuleId}${quotes}`;
+            fixes.push((fixer) =>
+              fixer.replaceText(node.arguments[0], withQuotes)
+            );
+          }
+        },
         ImportDeclaration(n: EsTree.Node) {
           const node = n as any;
           const moduleId = node.source.value;
