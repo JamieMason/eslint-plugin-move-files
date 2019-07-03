@@ -53,7 +53,7 @@ const rule: Rule.RuleModule = {
       }
 
       if (sourceIsGlob && targetIsRelativePath) {
-        return glob.sync(source).forEach((sourceFile) => {
+        return glob.sync(source, { absolute: true }).forEach((sourceFile) => {
           files[sourceFile] = targetIsDirectoryLike
             ? join(resolve(dirname(sourceFile), target), basename(sourceFile))
             : resolve(dirname(sourceFile), target);
@@ -65,7 +65,7 @@ const rule: Rule.RuleModule = {
       }
 
       // plain file to plain file
-      files[source] = target;
+      files[resolve(source)] = resolve(dirname(source), target);
     });
 
     const currentFilePath = context.getFilename();
@@ -102,7 +102,7 @@ const rule: Rule.RuleModule = {
             return;
           }
           const newDirPath = dirname(newFilePath);
-          if (dirPath !== newDirPath) {
+          if (newDirPath !== dirPath) {
             const quotes = node.source.raw.charAt(0);
             const rawModulePath = withFileExtension(resolve(dirPath, moduleId));
             const modulePath = files[rawModulePath] || rawModulePath;
@@ -122,7 +122,10 @@ const rule: Rule.RuleModule = {
               // ESLint's types don't reflect that an array of fixes can be returned
               return (fixes.map((fn) => fn(fixer)) as unknown) as Rule.Fix;
             },
-            message: ERROR_MOVED_FILE(currentFilePath, newFilePath),
+            message: ERROR_MOVED_FILE(
+              withLeadingDot(relative(process.cwd(), currentFilePath)),
+              withLeadingDot(relative(process.cwd(), newFilePath))
+            ),
             node
           });
         }
@@ -144,7 +147,10 @@ const rule: Rule.RuleModule = {
           const withQuotes = `${quotes}${newModuleId}${quotes}`;
           return context.report({
             fix: (fixer) => fixer.replaceText(node.arguments[0], withQuotes),
-            message: ERROR_MOVED_FILE(modulePath, newModulePath),
+            message: ERROR_MOVED_FILE(
+              withLeadingDot(relative(process.cwd(), modulePath)),
+              withLeadingDot(relative(process.cwd(), newModulePath))
+            ),
             node: node.arguments[0]
           });
         }
@@ -163,7 +169,10 @@ const rule: Rule.RuleModule = {
           const withQuotes = `${quotes}${newModuleId}${quotes}`;
           return context.report({
             fix: (fixer) => fixer.replaceText(node.source, withQuotes),
-            message: ERROR_MOVED_FILE(modulePath, newModulePath),
+            message: ERROR_MOVED_FILE(
+              withLeadingDot(relative(process.cwd(), modulePath)),
+              withLeadingDot(relative(process.cwd(), newModulePath))
+            ),
             node: node.source
           });
         }
