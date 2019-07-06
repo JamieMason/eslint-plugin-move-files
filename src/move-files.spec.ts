@@ -1,5 +1,6 @@
 import { RuleTester } from 'eslint';
 import { existsSync, readFileSync } from 'fs';
+import * as glob from 'glob';
 import * as mock from 'mock-fs';
 import { resolve } from 'path';
 import rule from './move-files';

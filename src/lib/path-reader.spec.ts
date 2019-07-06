@@ -27,8 +27,12 @@ describe('getValue', () => {
         ['ext', 'js'],
         ['name', 'module'],
         ['rootDir', PWD],
+        // mismatches
         ['invalid', ''],
-        ['unrecognised', '']
+        ['ancestors.2.prop', ''],
+        ['ancestors.2', ''],
+        ['dirs.2', ''],
+        ['exts.2', '']
       ]
     ],
     [
@@ -47,9 +51,7 @@ describe('getValue', () => {
         ['dir', 'src/lib'],
         ['ext', 'spec.js'],
         ['name', 'module'],
-        ['rootDir', PWD],
-        ['invalid', ''],
-        ['unrecognised', '']
+        ['rootDir', PWD]
       ]
     ],
     [
@@ -68,9 +70,7 @@ describe('getValue', () => {
         ['dir', ''],
         ['ext', 'babelrc'],
         ['name', ''],
-        ['rootDir', PWD],
-        ['invalid', ''],
-        ['unrecognised', '']
+        ['rootDir', PWD]
       ]
     ],
     [
@@ -89,9 +89,7 @@ describe('getValue', () => {
         ['dir', ''],
         ['ext', 'eslintrc.js'],
         ['name', ''],
-        ['rootDir', PWD],
-        ['invalid', ''],
-        ['unrecognised', '']
+        ['rootDir', PWD]
       ]
     ]
   ];
