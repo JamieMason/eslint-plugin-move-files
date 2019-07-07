@@ -5,7 +5,7 @@
 [![NPM version](http://img.shields.io/npm/v/eslint-plugin-move-files.svg?style=flat-square)](https://www.npmjs.com/package/eslint-plugin-move-files)
 [![NPM downloads](http://img.shields.io/npm/dm/eslint-plugin-move-files.svg?style=flat-square)](https://www.npmjs.com/package/eslint-plugin-move-files)
 [![Build Status](http://img.shields.io/travis/JamieMason/eslint-plugin-move-files/master.svg?style=flat-square)](https://travis-ci.org/JamieMason/eslint-plugin-move-files)
-[![Maintainability](https://api.codeclimate.com/v1/badges/TODO/maintainability)](https://codeclimate.com/github/JamieMason/eslint-plugin-move-files/maintainability)
+[![Maintainability](https://api.codeclimate.com/v1/badges/170c5ae0fbf646e5678a/maintainability)](https://codeclimate.com/github/JamieMason/eslint-plugin-move-files/maintainability)
 [![Gitter Chat](https://badges.gitter.im/Join%20Chat.svg)](https://gitter.im/JamieMason/eslint-plugin-move-files)
 [![Donate via PayPal](https://img.shields.io/badge/donate-paypal-blue.svg)](https://www.paypal.me/foldleft)
 [![Backers](https://opencollective.com/fold_left/backers/badge.svg)](https://opencollective.com/fold_left#backer)
