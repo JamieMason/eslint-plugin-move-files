@@ -1,7 +1,7 @@
 {
   "name": "eslint-plugin-move-files",
   "description": "Move and rename files while keeping imports up to date",
-  "version": "0.0.0",
+  "version": "0.7.1-alpha",
   "author": "Jamie Mason (https://github.com/JamieMason)",
   "bugs": "https://github.com/JamieMason/eslint-plugin-move-files/issues",
   "dependencies": {
