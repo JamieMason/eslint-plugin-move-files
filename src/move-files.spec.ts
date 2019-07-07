@@ -14,7 +14,7 @@ type NewModuleId = string;
 interface File {
   path: [OldPath, NewPath?];
   consumers: Array<[ConsumerPath, OldModuleId, NewModuleId?]>;
-  imports: Array<[OldModuleId, NewModuleId]>;
+  imports: Array<[OldModuleId, NewModuleId?]>;
 }
 
 type Target = string;
@@ -74,7 +74,7 @@ const testCases: TestCase[] = [
           ['./src/consumer.js', './rename-me', './renamed'],
           ['./src/unaffected.js', './lib']
         ],
-        imports: []
+        imports: [['../main']]
       }
     ],
     options: {
@@ -314,7 +314,7 @@ const testCases: TestCase[] = [
           if (imports.length > 0) {
             imports.forEach(([oldModuleId, newModuleId]) => {
               code += getCode(oldModuleId);
-              output += getCode(newModuleId);
+              output += getCode(newModuleId ? newModuleId : oldModuleId);
             });
           }
 
