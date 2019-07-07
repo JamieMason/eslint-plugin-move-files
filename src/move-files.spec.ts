@@ -1,6 +1,5 @@
 import { RuleTester } from 'eslint';
 import { existsSync, readFileSync } from 'fs';
-import * as glob from 'glob';
 import * as mock from 'mock-fs';
 import { resolve } from 'path';
 import rule from './move-files';
@@ -14,7 +13,7 @@ type NewModuleId = string;
 
 interface File {
   path: [OldPath, NewPath?];
-  consumers: Array<[ConsumerPath, OldModuleId, NewModuleId]>;
+  consumers: Array<[ConsumerPath, OldModuleId, NewModuleId?]>;
   imports: Array<[OldModuleId, NewModuleId]>;
 }
 
@@ -52,11 +51,29 @@ describe('when no files are provided', () => {
 
 const testCases: TestCase[] = [
   {
+    description: 'ignore files which do not match patterns',
+    fileSystem: [
+      {
+        path: ['./src/ignore-me.js'],
+        consumers: [['./src/consumer.js', './ignore-me']],
+        imports: []
+      }
+    ],
+    options: {
+      files: {
+        './src/matches-nothing.js': './renamed.js'
+      }
+    }
+  },
+  {
     description: 'rename a file in-place',
     fileSystem: [
       {
         path: ['./src/rename-me.js', './src/renamed.js'],
-        consumers: [['./src/consumer.js', './rename-me', './renamed']],
+        consumers: [
+          ['./src/consumer.js', './rename-me', './renamed'],
+          ['./src/unaffected.js', './lib']
+        ],
         imports: []
       }
     ],
@@ -316,13 +333,22 @@ const testCases: TestCase[] = [
           // should update imports of files consuming moved file
           if (hasConsumers) {
             consumers.forEach(([consumerPath, oldId, newId]) => {
-              invalid.push({
-                code: getCode(oldId),
-                errors: [{ message: `${oldPath} has moved to ${newPath}` }],
-                filename: resolve(consumerPath),
-                options: [{ files }],
-                output: getCode(newId)
-              });
+              if (newId) {
+                invalid.push({
+                  code: getCode(oldId),
+                  errors: [{ message: `${oldPath} has moved to ${newPath}` }],
+                  filename: resolve(consumerPath),
+                  options: [{ files }],
+                  output: getCode(newId)
+                });
+              } else {
+                // should do nothing when import is not moved
+                valid.push({
+                  code: getCode(oldId),
+                  filename: resolve(consumerPath),
+                  options: [{ files }]
+                });
+              }
             });
           }
 
