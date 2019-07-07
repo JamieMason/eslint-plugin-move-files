@@ -1,23 +1,21 @@
 import { Rule } from 'eslint';
 import * as EsTree from 'estree';
-import { outputFileSync, removeSync } from 'fs-extra';
+import { copyFileSync, removeSync } from 'fs-extra';
 import * as glob from 'glob';
 import { basename, dirname, join, relative, resolve } from 'path';
 import { ERROR_MOVED_FILE } from './config';
 import { getIn } from './lib/get-in';
 import { interpolate } from './lib/path-reader';
 
-type FixList = Array<(fixer: Rule.RuleFixer) => Rule.Fix>;
-
 interface FileIndex {
   [source: string]: string;
 }
 
-interface ModuleStrategy {
-  getModuleId: (node: any) => string;
-  getQuotes: (node: any) => string;
-  getSource: (node: any) => EsTree.Identifier;
+interface VisitedFiles {
+  [source: string]: boolean;
 }
+
+const visitedFiles: VisitedFiles = {};
 
 const isDir = (path: string) => !basename(path).includes('.');
 
@@ -29,7 +27,7 @@ const withLeadingDot = (moduleId: string) =>
 const withoutFileExtension = (filePath: string) =>
   filePath.replace(/\.[^.]+$/, '');
 
-const getNewModuleId = (filePath: string) =>
+const getNewDepId = (filePath: string) =>
   withLeadingDot(withoutFileExtension(filePath));
 
 const withFileExtension = (filePath: string) => {
@@ -41,27 +39,39 @@ const withFileExtension = (filePath: string) => {
 };
 
 const updateMovedFile = (
+  context: Rule.RuleContext,
   files: FileIndex,
-  dirPath: string,
+  fileDirPath: string,
   newFilePath: string,
   n: EsTree.Node,
-  fixes: FixList,
-  { getModuleId, getQuotes, getSource }: ModuleStrategy
+  getDepId: (node: any) => string
 ) => {
   const node = n as any;
-  const moduleId = getModuleId(node);
-  if (!moduleId.startsWith('.')) {
+  const depId = getDepId(node);
+  if (!depId.startsWith('.')) {
     return;
   }
-  const newDirPath = dirname(newFilePath);
-  if (newDirPath !== dirPath) {
-    const quotes = getQuotes(node);
-    const rawModulePath = withFileExtension(resolve(dirPath, moduleId));
-    const modulePath = files[rawModulePath] || rawModulePath;
-    const newPathToModule = relative(newDirPath, modulePath);
-    const newModuleId = getNewModuleId(newPathToModule);
-    const withQuotes = `${quotes}${newModuleId}${quotes}`;
-    fixes.push((fixer) => fixer.replaceText(getSource(node), withQuotes));
+  const newFileDirPath = dirname(newFilePath);
+  if (newFileDirPath !== fileDirPath) {
+    const depPath = withFileExtension(resolve(fileDirPath, depId));
+    const newDepPath = files[depPath] || depPath;
+    const newPathToDep = relative(newFileDirPath, newDepPath);
+    const newDepId = getNewDepId(newPathToDep);
+    return context.report({
+      fix: (fixer) =>
+        fixer.replaceText(
+          node,
+          context
+            .getSourceCode()
+            .getText(node)
+            .replace(depId, newDepId)
+        ),
+      message: ERROR_MOVED_FILE(
+        withLeadingDot(relative(process.cwd(), depPath)),
+        withLeadingDot(relative(process.cwd(), newDepPath))
+      ),
+      node
+    });
   }
 };
 
@@ -70,41 +80,37 @@ const updateConsumer = (
   files: FileIndex,
   dirPath: string,
   n: EsTree.Node,
-  { getModuleId, getQuotes, getSource }: ModuleStrategy
+  getDepId: (node: any) => string
 ) => {
   const node = n as any;
-  const moduleId = getModuleId(node);
+  const moduleId = getDepId(node);
   if (!moduleId.startsWith('.')) {
     return;
   }
-  const quotes = getQuotes(node);
   const modulePath = withFileExtension(resolve(dirPath, moduleId));
   const newModulePath = files[modulePath];
   if (newModulePath) {
-    const newModuleId = getNewModuleId(relative(dirPath, newModulePath));
-    const withQuotes = `${quotes}${newModuleId}${quotes}`;
+    const newModuleId = getNewDepId(relative(dirPath, newModulePath));
     return context.report({
-      fix: (fixer) => fixer.replaceText(getSource(node), withQuotes),
+      fix: (fixer) =>
+        fixer.replaceText(
+          node,
+          context
+            .getSourceCode()
+            .getText(node)
+            .replace(moduleId, newModuleId)
+        ),
       message: ERROR_MOVED_FILE(
         withLeadingDot(relative(process.cwd(), modulePath)),
         withLeadingDot(relative(process.cwd(), newModulePath))
       ),
-      node: getSource(node)
+      node
     });
   }
 };
 
-const requireStrategy: ModuleStrategy = {
-  getModuleId: (node: any) => getIn('arguments.0.value', node, ''),
-  getQuotes: (node: any) => node.arguments[0].raw.charAt(0),
-  getSource: (node: any) => node.arguments[0]
-};
-
-const importStrategy: ModuleStrategy = {
-  getModuleId: (node: any) => node.source.value,
-  getQuotes: (node: any) => node.source.raw.charAt(0),
-  getSource: (node: any) => node.source
-};
+const getRequireDepId = (node: any) => getIn('arguments.0.value', node, '');
+const getImportDepId = (node: any) => node.source.value;
 
 const rule: Rule.RuleModule = {
   meta: {
@@ -130,7 +136,14 @@ const rule: Rule.RuleModule = {
     ]
   },
   create: (context) => {
-    const sourceCode = context.getSourceCode();
+    const currentFilePath = context.getFilename();
+
+    if (visitedFiles[currentFilePath]) {
+      return {};
+    }
+
+    visitedFiles[currentFilePath] = true;
+
     const patterns: FileIndex = getIn('options.0.files', context, {});
     const files: FileIndex = {};
 
@@ -147,43 +160,41 @@ const rule: Rule.RuleModule = {
           });
       });
 
-    const currentFilePath = context.getFilename();
     const dirPath = dirname(currentFilePath);
     const newFilePath = files[currentFilePath];
     const isFileBeingMoved = Boolean(newFilePath);
 
     if (isFileBeingMoved) {
-      const fixes: FixList = [];
       return {
         'CallExpression[callee.name="require"]'(n: EsTree.Node) {
           return updateMovedFile(
+            context,
             files,
             dirPath,
             newFilePath,
             n,
-            fixes,
-            requireStrategy
+            getRequireDepId
           );
         },
         ImportDeclaration(n: EsTree.Node) {
           return updateMovedFile(
+            context,
             files,
             dirPath,
             newFilePath,
             n,
-            fixes,
-            importStrategy
+            getImportDepId
           );
         },
         'Program:exit'(n: EsTree.Node) {
           const node = n as EsTree.Program;
           return context.report({
             fix(fixer) {
-              const contents = sourceCode.getText();
-              process.nextTick(() => removeSync(currentFilePath));
-              outputFileSync(newFilePath, contents);
-              // ESLint's types don't reflect that an array of fixes can be returned
-              return (fixes.map((fn) => fn(fixer)) as unknown) as Rule.Fix;
+              process.nextTick(() => {
+                copyFileSync(currentFilePath, newFilePath);
+                removeSync(currentFilePath);
+              });
+              return fixer.insertTextAfter(node, '');
             },
             message: ERROR_MOVED_FILE(
               withLeadingDot(relative(process.cwd(), currentFilePath)),
@@ -197,10 +208,10 @@ const rule: Rule.RuleModule = {
 
     return {
       'CallExpression[callee.name="require"]'(n: EsTree.Node) {
-        return updateConsumer(context, files, dirPath, n, requireStrategy);
+        return updateConsumer(context, files, dirPath, n, getRequireDepId);
       },
       ImportDeclaration(n: EsTree.Node) {
-        return updateConsumer(context, files, dirPath, n, importStrategy);
+        return updateConsumer(context, files, dirPath, n, getImportDepId);
       }
     };
   }
