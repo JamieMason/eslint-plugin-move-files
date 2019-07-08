@@ -101,7 +101,7 @@ available:
 
 This dataset can be read using the following tokens. A destination of
 `'{rootDir}/test/{ancestors.0}/{name}.js'` for example would move this file to
-`test/lib/module.js`.
+`/path/to/project/test/lib/module.js`.
 
 | Token                      | Value              |
 | -------------------------- | ------------------ |
