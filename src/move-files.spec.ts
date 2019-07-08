@@ -1,8 +1,8 @@
 import { RuleTester } from 'eslint';
 import { existsSync, readFileSync } from 'fs';
-import * as mock from 'mock-fs';
+import mock from 'mock-fs';
 import { resolve } from 'path';
-import rule from './move-files';
+import index from './';
 import { ruleTester } from './test/rule-tester';
 
 type OldPath = string;
@@ -28,6 +28,8 @@ interface TestCase {
     };
   };
 }
+
+const rule = index.rules['move-files'];
 
 const readTextFileSync = (filePath: string) =>
   readFileSync(filePath, { encoding: 'utf8' });
