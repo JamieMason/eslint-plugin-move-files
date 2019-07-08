@@ -58,6 +58,7 @@ the structure described below.
           // use .jsx extension in all React components
           "./src/components/**/*.js": "./{name}.jsx",
           // locate tests alongside source
+          "./test/*.js": "{rootDir}/src/{name}.spec.js",
           "./test/*/*.js": "{rootDir}/src/{..}/{name}.spec.js",
           "./test/*/*/*.js": "{rootDir}/src/{...}/{..}/{name}.spec.js",
           "./test/*/*/*/*.js": "{rootDir}/src/{....}/{...}/{..}/{name}.spec.js"
