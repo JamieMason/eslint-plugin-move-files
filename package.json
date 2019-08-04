@@ -12,9 +12,9 @@
     "@types/eslint": "4.16.6",
     "@types/fs-extra": "8.0.0",
     "@types/glob": "7.1.1",
-    "@types/jest": "24.0.15",
+    "@types/jest": "24.0.16",
     "@types/mock-fs": "3.6.30",
-    "@types/node": "12.0.10",
+    "@types/node": "12.6.9",
     "eslint": "5.16.0",
     "jest": "24.8.0",
     "mock-fs": "4.10.1",
@@ -22,7 +22,7 @@
     "rimraf": "2.6.3",
     "ts-jest": "24.0.2",
     "tslint": "5.18.0",
-    "typescript": "3.5.2"
+    "typescript": "3.5.3"
   },
   "files": [
     "dist"
@@ -39,6 +39,9 @@
     "eslint": ">=5.0.0"
   },
   "repository": "JamieMason/eslint-plugin-move-files",
+  "resolutions": {
+    "lodash": ">=4.17.15"
+  },
   "scripts": {
     "build": "tsc --project .",
     "format": "prettier --write '**/*.md' './src/**/*.ts' './test/**/*.ts'",
