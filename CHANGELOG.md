@@ -1,4 +1,13 @@
-## 0.7.1-alpha (2019-07-07)
+## [0.7.2](https://github.com/JamieMason/eslint-plugin-move-files/compare/0.7.1-alpha...0.7.2) (2019-08-04)
+
+
+### Bug Fixes
+
+* **npm:** update dependencies ([347728a](https://github.com/JamieMason/eslint-plugin-move-files/commit/347728a))
+
+
+
+## [0.7.1-alpha](https://github.com/JamieMason/eslint-plugin-move-files/compare/103d587...0.7.1-alpha) (2019-07-07)
 
 
 ### Bug Fixes
