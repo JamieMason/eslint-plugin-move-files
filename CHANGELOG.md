@@ -1,3 +1,19 @@
+## [0.7.5](https://github.com/JamieMason/eslint-plugin-move-files/compare/0.7.2...0.7.5) (2019-10-09)
+
+
+### Bug Fixes
+
+* **npm:** update dependencies ([617b312](https://github.com/JamieMason/eslint-plugin-move-files/commit/617b312))
+* **rule:** handle fixer being run multiple times ([31287f1](https://github.com/JamieMason/eslint-plugin-move-files/commit/31287f1))
+* **rule:** keep file extension when not .js ([9f10493](https://github.com/JamieMason/eslint-plugin-move-files/commit/9f10493))
+
+
+### Performance Improvements
+
+* **rule:** cache index of file locations ([a4c661d](https://github.com/JamieMason/eslint-plugin-move-files/commit/a4c661d))
+
+
+
 ## [0.7.2](https://github.com/JamieMason/eslint-plugin-move-files/compare/0.7.1-alpha...0.7.2) (2019-08-04)
 
 
