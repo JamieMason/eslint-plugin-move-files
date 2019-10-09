@@ -1,6 +1,6 @@
 import { Rule } from 'eslint';
 import * as EsTree from 'estree';
-import { copyFileSync, removeSync } from 'fs-extra';
+import { copyFileSync, ensureFileSync, removeSync } from 'fs-extra';
 import * as glob from 'glob';
 import { basename, dirname, join, relative, resolve } from 'path';
 import { ERROR_MOVED_FILE } from './config';
@@ -189,22 +189,14 @@ const rule: Rule.RuleModule = {
             getImportDepId
           );
         },
-        'Program:exit'(n: EsTree.Node) {
-          const node = n as EsTree.Program;
-          return context.report({
-            fix(fixer) {
-              process.nextTick(() => {
-                copyFileSync(currentFilePath, newFilePath);
-                removeSync(currentFilePath);
-              });
-              return fixer.insertTextAfter(node, '');
-            },
-            message: ERROR_MOVED_FILE(
-              withLeadingDot(relative(process.cwd(), currentFilePath)),
-              withLeadingDot(relative(process.cwd(), newFilePath))
-            ),
-            node
-          });
+        onCodePathEnd(codePath: Rule.CodePath, n: EsTree.Node) {
+          if (n.type === 'Program') {
+            process.nextTick(() => {
+              ensureFileSync(newFilePath);
+              copyFileSync(currentFilePath, newFilePath);
+              removeSync(currentFilePath);
+            });
+          }
         }
       };
     }
