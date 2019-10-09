@@ -1,8 +1,3 @@
-## 🙋🏽 Status
-
-This plugin is in alpha status, there are some small issues to address and more
-testing is needed on real projects before it is considered ready.
-
 ## 📣 Summary
 
 - Move and rename files in bulk.
@@ -17,7 +12,33 @@ testing is needed on real projects before it is considered ready.
 npm install --save-dev eslint eslint-plugin-move-files
 ```
 
+## 🤫 Caveats
+
+- This plugin is in alpha, more testing is needed on real projects.
+- It is best to run this rule on its own to avoid false-positives from plugins
+  such as `eslint-plugin-imports` while files are being moved but files
+  dependending on them have not yet been updated. This is necessary because the
+  order which rules and files will run is not predictable or guaranteed.
+
 ## ⚖️ Configuration
+
+## npm Scripts
+
+It is recommended to run this plugin on its own, before running the other ESLint
+Rules in your project. In this example you would run `npm run lint` to achieve
+this:
+
+```json
+{
+  "scripts": {
+    "lint:fs": "eslint --fix --config .eslintrc-fs.js --no-inline-config 'src/**/*.js' 'test/**/*.js'",
+    "lint:js": "eslint --fix --config .eslintrc.js 'src/**/*.js' 'test/**/*.js'",
+    "lint": "npm run lint:fs && npm run lint:js"
+  }
+}
+```
+
+### ESLint
 
 These changes relate to the `.eslintrc` file explained in
 [Configuring ESLint](https://eslint.org/docs/user-guide/configuring). You will
@@ -27,10 +48,15 @@ the structure described below.
 
 ```js
 {
+  "root": true,
+  "parserOptions": {
+    "ecmaVersion": 2019,
+    "sourceType": "module"
+  },
   "plugins": ["move-files"],
   "rules": {
     "move-files/move-files": [
-      "warn",
+      "error",
       {
         "files": {
           // rename a file in-place
@@ -45,7 +71,10 @@ the structure described below.
           "./test/*.js": "{rootDir}/src/{name}.spec.js",
           "./test/*/*.js": "{rootDir}/src/{..}/{name}.spec.js",
           "./test/*/*/*.js": "{rootDir}/src/{...}/{..}/{name}.spec.js",
-          "./test/*/*/*/*.js": "{rootDir}/src/{....}/{...}/{..}/{name}.spec.js"
+          "./test/*/*/*/*.js": "{rootDir}/src/{....}/{...}/{..}/{name}.spec.js",
+          "./test/*/*/*/*/*.js": "{rootDir}/src/{.....}/{....}/{...}/{..}/{name}.spec.js",
+          "./test/*/*/*/*/*/*.js": "{rootDir}/src/{......}/{.....}/{....}/{...}/{..}/{name}.spec.js",
+          "./test/*/*/*/*/*/*/*.js": "{rootDir}/src/{.......}/{......}/{.....}/{....}/{...}/{..}/{name}.spec.js"
         }
       }
     ]
