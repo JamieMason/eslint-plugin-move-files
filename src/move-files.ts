@@ -27,7 +27,7 @@ const withLeadingDot = (moduleId: string) =>
     : `./${moduleId}`;
 
 const withoutFileExtension = (filePath: string) =>
-  filePath.replace(/\.[^.]+$/, '');
+  filePath.endsWith('.js') ? filePath.replace(/\.js$/, '') : filePath;
 
 const getNewDepId = (filePath: string) =>
   withLeadingDot(withoutFileExtension(filePath));
