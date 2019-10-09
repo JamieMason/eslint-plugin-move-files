@@ -15,6 +15,8 @@ interface VisitedFiles {
   [source: string]: boolean;
 }
 
+let files: FileIndex;
+
 const visitedFiles: VisitedFiles = {};
 
 const isDir = (path: string) => !basename(path).includes('.');
@@ -40,7 +42,7 @@ const withFileExtension = (filePath: string) => {
 
 const updateMovedFile = (
   context: Rule.RuleContext,
-  files: FileIndex,
+  fileIndex: FileIndex,
   fileDirPath: string,
   newFilePath: string,
   n: EsTree.Node,
@@ -54,7 +56,7 @@ const updateMovedFile = (
   const newFileDirPath = dirname(newFilePath);
   if (newFileDirPath !== fileDirPath) {
     const depPath = withFileExtension(resolve(fileDirPath, depId));
-    const newDepPath = files[depPath] || depPath;
+    const newDepPath = fileIndex[depPath] || depPath;
     const newPathToDep = relative(newFileDirPath, newDepPath);
     const newDepId = getNewDepId(newPathToDep);
     return context.report({
@@ -77,7 +79,7 @@ const updateMovedFile = (
 
 const updateConsumer = (
   context: Rule.RuleContext,
-  files: FileIndex,
+  fileIndex: FileIndex,
   dirPath: string,
   n: EsTree.Node,
   getDepId: (node: any) => string
@@ -88,7 +90,7 @@ const updateConsumer = (
     return;
   }
   const modulePath = withFileExtension(resolve(dirPath, moduleId));
-  const newModulePath = files[modulePath];
+  const newModulePath = fileIndex[modulePath];
   if (newModulePath) {
     const newModuleId = getNewDepId(relative(dirPath, newModulePath));
     return context.report({
@@ -137,6 +139,7 @@ const rule: Rule.RuleModule = {
   },
   create: (context) => {
     const currentFilePath = context.getFilename();
+    const dirPath = dirname(currentFilePath);
 
     if (visitedFiles[currentFilePath]) {
       return {};
@@ -144,23 +147,23 @@ const rule: Rule.RuleModule = {
 
     visitedFiles[currentFilePath] = true;
 
-    const patterns: FileIndex = getIn('options.0.files', context, {});
-    const files: FileIndex = {};
+    if (!files) {
+      const patterns: FileIndex = getIn('options.0.files', context, {});
+      files = {};
+      Object.entries(patterns)
+        .filter(([_, targetPattern]) => targetPattern.search(/[*+?!|@]/) === -1)
+        .forEach(([sourcePattern, targetPattern]) => {
+          glob
+            .sync(sourcePattern, { absolute: true, nodir: true })
+            .forEach((source) => {
+              const target = interpolate(targetPattern, source);
+              files[source] = isDir(target)
+                ? join(resolve(dirname(source), target), basename(source))
+                : resolve(dirname(source), target);
+            });
+        });
+    }
 
-    Object.entries(patterns)
-      .filter(([_, targetPattern]) => targetPattern.search(/[*+?!|@]/) === -1)
-      .forEach(([sourcePattern, targetPattern]) => {
-        glob
-          .sync(sourcePattern, { absolute: true, nodir: true })
-          .forEach((source) => {
-            const target = interpolate(targetPattern, source);
-            files[source] = isDir(target)
-              ? join(resolve(dirname(source), target), basename(source))
-              : resolve(dirname(source), target);
-          });
-      });
-
-    const dirPath = dirname(currentFilePath);
     const newFilePath = files[currentFilePath];
     const isFileBeingMoved = Boolean(newFilePath);
 
