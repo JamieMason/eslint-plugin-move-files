@@ -1,5 +1,5 @@
 module.exports = {
-  collectCoverage: true,
+  collectCoverage: false,
   collectCoverageFrom: ['src/**/*.ts', '!src/**/*.spec.ts', '!src/test'],
   coverageReporters: ['html', 'lcov'],
   coverageThreshold: {
