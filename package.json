@@ -5,7 +5,7 @@
   "author": "Jamie Mason (https://github.com/JamieMason)",
   "bugs": "https://github.com/JamieMason/eslint-plugin-move-files/issues",
   "dependencies": {
-    "fs-extra": "8.1.0",
+    "fs-extra": "^9.0.0",
     "glob": "7.1.4"
   },
   "devDependencies": {
